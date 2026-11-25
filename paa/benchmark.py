@@ -1,12 +1,11 @@
-"""Mede somente solve(), sem I/O, cópia da entrada ou validação."""
-from collections.abc import Callable
-from copy import deepcopy
+"""Mede somente solve(); geração, validação e I/O ficam fora da região cronometrada."""
+import gc
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from math import isclose, isfinite
 from statistics import median
 from time import perf_counter_ns
 
-from paa.models import Case, Instance, Solution
+from paa.models import Instance, Solution
 
 Solver = Callable[[Instance], Solution]
 Validator = Callable[[Instance, Solution], None]
@@ -14,46 +13,59 @@ Validator = Callable[[Instance, Solution], None]
 
 @dataclass(frozen=True)
 class Measurement:
-    objective: int | float
+    algorithm: str
+    size: int
     median_ms: float
     min_ms: float
     repetitions: int
 
 
-def same_objective(a: int | float, b: int | float) -> bool:
-    if isinstance(a, int) and isinstance(b, int):
-        return a == b
-    return isclose(a, b, rel_tol=1e-9, abs_tol=1e-9)
-
-
-def measure(solver: Solver, case: Case, validate: Validator, repetitions: int = 10) -> Measurement:
+def measure(
+    name: str,
+    solver: Solver,
+    instance: Instance,
+    validate: Validator,
+    repetitions: int = 5,
+    expected_size: int | None = None,
+) -> Measurement:
+    """Executa o solver várias vezes, valida cada resposta e resume os tempos em ms."""
     if repetitions < 1:
         raise ValueError("O número de repetições deve ser positivo.")
-    durations = []
-    objectives = []
+    durations: list[float] = []
+    sizes: set[int] = set()
     for _ in range(repetitions):
-        instance = deepcopy(case.instance)
-        start = perf_counter_ns()
-        solution = solver(instance)
-        elapsed = perf_counter_ns() - start
-        # Validação usa a entrada original, inclusive se o solver alterar sua cópia.
-        validate(deepcopy(case.instance), solution)
-        if isinstance(solution.objective, bool) or not isinstance(solution.objective, (int, float)):
-            raise ValueError("Objetivo deve ser numérico.")
-        if isinstance(solution.objective, float) and not isfinite(solution.objective):
-            raise ValueError("Objetivo deve ser finito.")
-        if case.expected_objective is not None and not same_objective(solution.objective, case.expected_objective):
-            raise AssertionError(f"{case.name}: objetivo diferente do ótimo esperado.")
-        if objectives and not same_objective(solution.objective, objectives[0]):
-            raise AssertionError(f"{case.name}: objetivos inconsistentes entre repetições.")
-        objectives.append(solution.objective)
+        gc.collect()
+        gc.disable()
+        try:
+            start = perf_counter_ns()
+            solution = solver(instance)
+            elapsed = perf_counter_ns() - start
+        finally:
+            gc.enable()
+        validate(instance, solution)
+        sizes.add(solution.size)
         durations.append(elapsed / 1_000_000)
-    return Measurement(objectives[0], median(durations), min(durations), repetitions)
+    if len(sizes) != 1:
+        raise AssertionError(f"{name}: cardinalidades inconsistentes entre repetições: {sorted(sizes)}.")
+    size = sizes.pop()
+    if expected_size is not None and size != expected_size:
+        raise AssertionError(f"{name}: cardinalidade {size}, ótimo esperado {expected_size}.")
+    return Measurement(name, size, median(durations), min(durations), repetitions)
 
 
-def compare(dp: Solver, greedy: Solver, case: Case, validate: Validator, repetitions: int = 10) -> tuple[Measurement, Measurement]:
-    left = measure(dp, case, validate, repetitions)
-    right = measure(greedy, case, validate, repetitions)
-    if not same_objective(left.objective, right.objective):
-        raise AssertionError(f"{case.name}: os algoritmos retornaram objetivos diferentes.")
-    return left, right
+def compare(
+    solvers: Mapping[str, Solver],
+    instance: Instance,
+    validate: Validator,
+    repetitions: int = 5,
+    expected_size: int | None = None,
+) -> list[Measurement]:
+    """Mede cada solver na mesma instância e exige cardinalidades iguais entre eles.
+
+    Compara somente a cardinalidade: com múltiplos ótimos, as arestas podem diferir.
+    """
+    results = [measure(name, solver, instance, validate, repetitions, expected_size) for name, solver in solvers.items()]
+    if len({m.size for m in results}) > 1:
+        detail = ", ".join(f"{m.algorithm}={m.size}" for m in results)
+        raise AssertionError(f"Cardinalidades diferentes entre algoritmos: {detail}.")
+    return results

@@ -1,6 +1,6 @@
 [project]
 name = "paa-comparacao"
 version = "0.1.0"
-description = "Comparação de programação dinâmica e algoritmo guloso"
+description = "Emparelhamento máximo em árvores: programação dinâmica × algoritmo guloso"
 requires-python = ">=3.10"
 dependencies = []

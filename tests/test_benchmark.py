@@ -1,46 +1,56 @@
-"""Testa somente a infraestrutura com funções fictícias, não os algoritmos."""
+"""Testa a infraestrutura de benchmark com solvers fictícios, não os algoritmos."""
 import unittest
 
 from paa.benchmark import compare, measure
-from paa.models import Case, Instance, Solution
+from paa.models import Instance, Solution
+from paa.problem import validate_matching
+
+TREE = Instance(3, ((0, 1), (1, 2)))
 
 
-def fake_solver(instance):
-    return Solution(instance.data["value"], [])
+def empty_solver(instance):
+    return Solution(())
 
 
-def fake_validate(instance, solution):
-    if solution.objective != instance.data["value"]:
-        raise ValueError("Objetivo inválido")
+def first_edge_solver(instance):
+    return Solution(instance.edges[:1])
 
 
 class BenchmarkTests(unittest.TestCase):
-    def setUp(self):
-        self.case = Case("infraestrutura", Instance({"value": 42}), 42)
+    def test_measure(self):
+        result = measure("fake", first_edge_solver, TREE, validate_matching, 3, expected_size=1)
+        self.assertEqual((result.algorithm, result.size, result.repetitions), ("fake", 1, 3))
+        self.assertGreaterEqual(result.median_ms, result.min_ms)
+        self.assertGreaterEqual(result.min_ms, 0)
 
-    def test_compare(self):
-        left, right = compare(fake_solver, fake_solver, self.case, fake_validate, 2)
-        self.assertEqual(left.objective, right.objective)
-        self.assertEqual(left.repetitions, 2)
-        self.assertGreaterEqual(left.median_ms, 0)
+    def test_compare_same_size(self):
+        results = compare({"a": first_edge_solver, "b": first_edge_solver}, TREE, validate_matching, 2)
+        self.assertEqual([m.size for m in results], [1, 1])
+
+    def test_compare_single_solver(self):
+        self.assertEqual(len(compare({"a": empty_solver}, TREE, validate_matching, 1)), 1)
 
     def test_invalid_repetitions(self):
         with self.assertRaises(ValueError):
-            measure(fake_solver, self.case, fake_validate, 0)
+            measure("fake", empty_solver, TREE, validate_matching, 0)
 
-    def test_wrong_expected_objective(self):
-        case = Case("incorreto", self.case.instance, 99)
+    def test_wrong_expected_size(self):
         with self.assertRaises(AssertionError):
-            measure(fake_solver, case, fake_validate, 1)
+            measure("fake", empty_solver, TREE, validate_matching, 1, expected_size=1)
 
-    def test_different_objectives(self):
-        case = Case("divergencia", self.case.instance)
+    def test_different_sizes(self):
         with self.assertRaises(AssertionError):
-            compare(fake_solver, lambda _: Solution(99, []), case, lambda *_: None, 1)
+            compare({"a": empty_solver, "b": first_edge_solver}, TREE, validate_matching, 1)
 
-    def test_isolated_input(self):
-        def mutating_solver(instance):
-            value = instance.data.pop("value")
-            return Solution(value, [])
-        measure(mutating_solver, self.case, fake_validate, 2)
-        self.assertEqual(self.case.instance.data, {"value": 42})
+    def test_invalid_matching_is_rejected(self):
+        with self.assertRaises(ValueError):
+            measure("fake", lambda _: Solution(((0, 1), (1, 2))), TREE, validate_matching, 1)
+
+    def test_inconsistent_repetitions(self):
+        answers = iter([Solution(()), Solution(((0, 1),))])
+        with self.assertRaises(AssertionError):
+            measure("fake", lambda _: next(answers), TREE, validate_matching, 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
