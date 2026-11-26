@@ -137,6 +137,36 @@ class SolverTests:
 class DynamicProgrammingTests(SolverTests, unittest.TestCase):
     solver = staticmethod(dynamic_programming.solve)
 
+    def test_reconstruction_root_free_vs_matched_and_ties(self):
+        # Raiz 0 livre (dp0[0] == dp1[0] == 2): ramos 0-1-3 e 0-2-4.
+        root_free = Instance(5, ((0, 1), (1, 3), (0, 2), (2, 4)))
+        sol_free = dynamic_programming.solve(root_free)
+        validate_matching(root_free, sol_free)
+        self.assertIsInstance(sol_free.matching, tuple)
+        self.assertEqual(sol_free.size, 2)
+        matched_vertices = {v for edge in sol_free.matching for v in edge}
+        self.assertNotIn(0, matched_vertices)
+
+        # Raiz 0 emparelhada (dp1[0] > dp0[0]) com múltiplos empates simétricos.
+        star_ties = Instance(6, ((0, 1), (0, 2), (0, 3), (0, 4), (0, 5)))
+        sol_star = dynamic_programming.solve(star_ties)
+        validate_matching(star_ties, sol_star)
+        self.assertIsInstance(sol_star.matching, tuple)
+        self.assertEqual(sol_star.size, 1)
+
+        # Aresta com orientação invertida (1, 0) e verificação estrita de tupla.
+        reversed_edge = Instance(2, ((1, 0),))
+        sol_rev = dynamic_programming.solve(reversed_edge)
+        validate_matching(reversed_edge, sol_rev)
+        self.assertIsInstance(sol_rev.matching, tuple)
+        self.assertEqual(sol_rev.size, 1)
+
+    def test_deep_high_branching_broom(self):
+        n = 200_000
+        h = (n + 1) // 2
+        expected = (h + 1) // 2 if n > h else h // 2
+        self.check(generate("broom", n, seed=0), expected)
+
 
 class GreedyTests(SolverTests, unittest.TestCase):
     solver = staticmethod(greedy.solve)
