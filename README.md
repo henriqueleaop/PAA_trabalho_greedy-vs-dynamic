@@ -57,14 +57,14 @@ paa/
   algorithms/
     __init__.py             # ALGORITHMS = {"dp": ..., "greedy": ...}
     dynamic_programming.py  # TODO integrante 1
-    greedy.py               # TODO integrante 2
+    greedy.py               # integrante 2: poda de folhas, O(n) (implementado)
 data/
   cases.json                # casos pequenos com ótimo conhecido
 tests/
   test_problem.py           # adjacência, entradas inválidas, emparelhamentos inválidos, cases.json
   test_generators.py        # validade, forma e reprodutibilidade das árvores geradas
   test_benchmark.py         # infraestrutura de medição (com solvers fictícios)
-  test_algorithms.py        # ótimos conhecidos, árvore profunda, PD × guloso (ignorados se pendentes)
+  test_algorithms.py        # ótimos conhecidos, força bruta, árvore profunda, PD × guloso (ignorados se pendentes)
 docs/
   fundamentacao-teorica.md  # ambos
   programacao-dinamica.md   # integrante 1
@@ -89,7 +89,9 @@ Os ótimos foram conferidos independentemente (força bruta em instâncias peque
 Incluem árvore unitária, caminhos, estrelas, binárias completas (balanceadas), lagarta,
 vassoura, aranha e uma árvore desbalanceada com cauda longa. Além deles,
 `test_algorithms.py` usa ótimos por fórmula fechada em árvores geradas
-(caminho: ⌊n/2⌋; estrela: 1; lagarta com n par: n/2; vassoura).
+(caminho: ⌊n/2⌋; estrela: 1; lagarta com n par: n/2; vassoura) e compara cada
+algoritmo com força bruta em todas as árvores rotuladas com n ≤ 6 (sequências de
+Prüfer) e em árvores aleatórias com 7 ≤ n ≤ 10.
 
 ### Benchmark
 
@@ -104,7 +106,7 @@ precisam coincidir. Memória é comparada analiticamente (não há medição emp
 | Integrante | Código | Documentação |
 | --- | --- | --- |
 | 1 | `paa/algorithms/dynamic_programming.py` | `docs/programacao-dinamica.md`: estados, recorrência, prova de otimalidade, complexidade |
-| 2 | `paa/algorithms/greedy.py` | `docs/guloso.md`: critério guloso, prova de otimalidade, complexidade |
+| 2 | `paa/algorithms/greedy.py` ✅ | `docs/guloso.md` ✅: critério guloso, prova de otimalidade, complexidade |
 | Ambos | testes adicionais, execução do benchmark | `docs/fundamentacao-teorica.md`, `docs/comparacao.md` (experimentos e conclusão) |
 
 Alterações no contrato compartilhado (`models.py`, `problem.py`) devem ser combinadas

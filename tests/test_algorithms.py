@@ -1,14 +1,55 @@
 """Testes dos algoritmos; ignorados explicitamente enquanto solve() lançar NotImplementedError."""
 import inspect
 import unittest
+from itertools import product
 from pathlib import Path
 
 from paa.algorithms import ALGORITHMS, dynamic_programming, greedy
 from paa.generators import TOPOLOGIES, generate
 from paa.models import Instance
-from paa.problem import load_cases, validate_matching
+from paa.problem import load_cases, validate_instance, validate_matching
 
 CASES = load_cases(Path(__file__).resolve().parents[1] / "data" / "cases.json")
+
+
+def prufer_tree(sequence: tuple[int, ...]) -> Instance:
+    """Decodifica uma sequência de Prüfer (O(n²), suficiente para n pequeno)."""
+    n = len(sequence) + 2
+    degree = [1] * n
+    for v in sequence:
+        degree[v] += 1
+    edges = []
+    for v in sequence:
+        leaf = min(u for u in range(n) if degree[u] == 1)
+        edges.append((leaf, v))
+        degree[leaf] -= 1
+        degree[v] -= 1
+    u, w = (x for x in range(n) if degree[x] == 1)
+    edges.append((u, w))
+    return Instance(n, tuple(edges))
+
+
+def brute_force_size(instance: Instance) -> int:
+    """Oráculo exponencial: testa todos os subconjuntos de arestas (só para n pequeno)."""
+    edges = instance.edges
+    best = 0
+    for mask in range(1 << len(edges)):
+        chosen = [edges[i] for i in range(len(edges)) if mask >> i & 1]
+        vertices = [x for edge in chosen for x in edge]
+        if len(chosen) > best and len(vertices) == len(set(vertices)):
+            best = len(chosen)
+    return best
+
+
+def small_trees():
+    """Todas as árvores rotuladas com n ≤ 6 e árvores aleatórias com 7 ≤ n ≤ 10."""
+    yield Instance(1)
+    yield Instance(2, ((0, 1),))
+    for n in range(3, 7):
+        yield from (prufer_tree(seq) for seq in product(range(n), repeat=n - 2))
+    for n in range(7, 11):
+        for seed in range(10):
+            yield generate("random", n, seed)
 
 
 def is_implemented(solver) -> bool:
@@ -22,6 +63,23 @@ def is_implemented(solver) -> bool:
 class ContractTests(unittest.TestCase):
     def test_same_public_signature(self):
         self.assertEqual(inspect.signature(dynamic_programming.solve), inspect.signature(greedy.solve))
+
+
+class OracleTests(unittest.TestCase):
+    """Confere os oráculos de teste, independentemente dos algoritmos."""
+
+    def test_prufer_enumerates_all_labeled_trees(self):
+        n = 5
+        trees = [prufer_tree(seq) for seq in product(range(n), repeat=n - 2)]
+        for tree in trees:
+            validate_instance(tree)
+        distinct = {frozenset(frozenset(edge) for edge in tree.edges) for tree in trees}
+        self.assertEqual(len(distinct), n ** (n - 2))  # Fórmula de Cayley
+
+    def test_brute_force_matches_known_cases(self):
+        for case in CASES:
+            with self.subTest(case=case.name):
+                self.assertEqual(brute_force_size(case.instance), case.expected_size)
 
 
 class SolverTests:
@@ -58,6 +116,11 @@ class SolverTests:
             with self.subTest(caterpillar=n):
                 # Lagarta com n par: cada vértice da espinha tem exatamente uma folha.
                 self.check(generate("caterpillar", n, seed=n), n // 2)
+
+    def test_matches_brute_force_on_small_trees(self):
+        for instance in small_trees():
+            with self.subTest(instance=instance):
+                self.check(instance, brute_force_size(instance))
 
     def test_does_not_mutate_input(self):
         instance = generate("random", 300, seed=3)
