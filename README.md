@@ -56,7 +56,7 @@ paa/
   __main__.py               # CLI: solve | benchmark
   algorithms/
     __init__.py             # ALGORITHMS = {"dp": ..., "greedy": ...}
-    dynamic_programming.py  # TODO integrante 1
+    dynamic_programming.py  # integrante 1: pilha explícita, reconstrução top down (implementado)
     greedy.py               # integrante 2: poda de folhas, O(n) (implementado)
 data/
   cases.json                # casos pequenos com ótimo conhecido
